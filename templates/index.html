@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lecture Assistant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .transcript-box, .summary-box {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .recording {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lecture Assistant</h1>
+        
+        <button id="recordButton">Start Recording</button>
+        
+        <div>
+            <h2>Live Transcript</h2>
+            <div id="transcript" class="transcript-box"></div>
+        </div>
+        
+        <div>
+            <h2>Summary</h2>
+            <div id="summary" class="summary-box"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let mediaRecorder;
+        let isRecording = false;
+        const recordButton = document.getElementById('recordButton');
+        const transcriptDiv = document.getElementById('transcript');
+        const summaryDiv = document.getElementById('summary');
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = async (event) => {
+                    if (event.data.size > 0) {
+                        const arrayBuffer = await event.data.arrayBuffer();
+                        socket.emit('audio_data', arrayBuffer);
+                    }
+                };
+
+                mediaRecorder.start(1000); // Send chunks every second
+                isRecording = true;
+                recordButton.textContent = 'Stop Recording';
+                recordButton.classList.add('recording');
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                recordButton.textContent = 'Start Recording';
+                recordButton.classList.remove('recording');
+            }
+        }
+
+        recordButton.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        socket.on('transcription', (data) => {
+            transcriptDiv.textContent += ' ' + data.transcript;
+            summaryDiv.textContent = data.summary;
+        });
+
+        socket.on('error', (data) => {
+            console.error('Error:', data.message);
+        });
+    </script>
+</body>
+</html>
